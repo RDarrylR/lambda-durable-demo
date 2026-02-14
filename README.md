@@ -4,6 +4,8 @@ A complete, working example of **AWS Lambda Durable Functions** in Python with a
 
 Built for the presentation: **"Lambda Durable Functions vs Step Functions: When Each Wins"**
 
+![AWS Console For Durable Functions](docs/console.png)
+
 ## What's Inside
 
 ```
