@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Lambda Durable Functions - Loan Approval Workflow
+  Demonstrates checkpoint/replay, callbacks, retries, parallel execution,
+  and the Saga pattern in a realistic loan processing pipeline.
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures:
+      - arm64
+    MemorySize: 1024
+    Timeout: 60
+    Tracing: Active
+    Environment:
+      Variables:
+        POWERTOOLS_LOG_LEVEL: INFO
+        POWERTOOLS_METRICS_NAMESPACE: LoanWorkflow
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: INFO
+
+Resources:
+  # ──────────────────────────────────────────────────────
+  # DynamoDB Progress Table
+  # ──────────────────────────────────────────────────────
+  LoanProgressTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-progress"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: application_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: application_id
+          KeyType: HASH
+
+  # ──────────────────────────────────────────────────────
+  # Durable Workflow Lambda
+  # ──────────────────────────────────────────────────────
+  LoanWorkflowFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LoanWorkflowFunction
+      CodeUri: src/
+      Handler: loan_demo.lambda_handler
+      Timeout: 300
+      AutoPublishAlias: live
+      DurableConfig:
+        ExecutionTimeout: 300           # 5 minutes
+        RetentionPeriodInDays: 3
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: LoanWorkflow
+          PROGRESS_TABLE: !Ref LoanProgressTable
+          FRAUD_CHECK_FUNCTION: !Ref FraudCheckFunction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:CheckpointDurableExecution
+                - lambda:GetDurableExecutionState
+                - lambda:GetDurableExecution
+                - lambda:ListDurableExecutions
+              Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:LoanWorkflowFunction*"
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LoanProgressTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt FraudCheckFunction.Arn
+
+  # ──────────────────────────────────────────────────────
+  # External Fraud Check (Callback)
+  # ──────────────────────────────────────────────────────
+  FraudCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: FraudCheckFunction
+      CodeUri: src/
+      Handler: fraud_check.lambda_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: FraudCheck
+          WORKFLOW_FUNCTION_NAME: !Sub "LoanWorkflowFunction:live"
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:SendDurableExecutionCallbackSuccess
+              Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:LoanWorkflowFunction*"
+
+  # ──────────────────────────────────────────────────────
+  # API Lambda + API Gateway
+  # ──────────────────────────────────────────────────────
+  LoanApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: "$default"
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+
+  LoanApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LoanApiFunction
+      CodeUri: src/
+      Handler: api.lambda_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: LoanApi
+          PROGRESS_TABLE: !Ref LoanProgressTable
+          LOAN_FUNCTION_NAME: !Ref LoanWorkflowFunctionAliaslive
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LoanProgressTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+                - lambda:SendDurableExecutionCallbackSuccess
+              Resource:
+                - !GetAtt LoanWorkflowFunction.Arn
+                - !Sub "${LoanWorkflowFunction.Arn}:*"
+      Events:
+        PostApply:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LoanApi
+            Path: /apply
+            Method: POST
+        GetStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LoanApi
+            Path: /status/{applicationId}
+            Method: GET
+        PostApprove:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LoanApi
+            Path: /approve/{applicationId}
+            Method: POST
+
+Outputs:
+  LoanApiUrl:
+    Description: "API Gateway endpoint URL (set in frontend/.env as VITE_API_URL)"
+    Value: !Sub "https://${LoanApi}.execute-api.${AWS::Region}.amazonaws.com"

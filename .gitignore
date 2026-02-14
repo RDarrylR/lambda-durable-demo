@@ -1,0 +1,11 @@
+node_modules/
+.aws-sam/
+frontend/dist/
+frontend/node_modules/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+.env.local
+.DS_Store
+response.json

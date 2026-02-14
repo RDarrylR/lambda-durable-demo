@@ -1,0 +1,2 @@
+aws-durable-execution-sdk-python
+aws-lambda-powertools[tracer]
