@@ -44,38 +44,7 @@ lambda-durable-demo/
 
 ## Workflow
 
-```
-┌──────────────┐     ┌───────────────────────────┐     ┌────────────────┐
-│  Validate    │────▶│  Parallel Credit Checks   │────▶│  Risk          │
-│  Application │     │  (3 bureaus concurrent)    │     │  Assessment    │
-└──────────────┘     └───────────────────────────┘     └───────┬────────┘
-                                                               │
-                                                    ┌──────────┼──────────┐
-                                                    ▼                     ▼
-                                              approved               DENIED
-                                                    │
-                                      ┌─────────────▼─────────────┐
-                                      │  Manager Approval          │
-                                      │  (if >= $100K, SUSPEND)    │
-                                      │  Frontend approve/deny     │
-                                      └─────────────┬─────────────┘
-                                                    │
-                                      ┌─────────────▼─────────────┐
-                                      │  Fraud Check (SUSPEND)     │
-                                      │  External Lambda callback  │
-                                      │  ($0 compute while waiting)│
-                                      └─────────────┬─────────────┘
-                                                    │
-                                      ┌─────────────▼─────────────┐
-                                      │  Generate Loan Offer       │
-                                      └─────────────┬─────────────┘
-                                                    │
-                                      ┌─────────────▼─────────────┐
-                                      │  Disburse Funds            │
-                                      └─────────────┬─────────────┘
-                                                    │
-                                                 FUNDED
-```
+![Loan Approval Workflow](docs/workflow.png)
 
 ## Demo Profiles
 
@@ -130,24 +99,7 @@ The frontend runs at `http://localhost:5173`.
 
 ## Architecture
 
-```
-┌─────────────────┐     ┌──────────────┐     ┌──────────────────┐     ┌──────────┐
-│  React Frontend │────▶│ API Gateway  │────▶│  API Lambda      │────▶│ DynamoDB │
-│  (Vite, local)  │◀────│  (HttpApi)   │◀────│  (api.py)        │◀────│  (logs)  │
-└─────────────────┘     └──────────────┘     └──────┬───────────┘     └────▲─────┘
-                                                     │ invoke async         │
-                                                     ▼                     │ write
-                                              ┌──────────────────┐         │ progress
-                                              │  Durable Workflow │─────────┘
-                                              │  (loan_demo.py)   │
-                                              └────────┬─────────┘
-                                                       │ invoke async
-                                                       ▼
-                                              ┌──────────────────┐
-                                              │  Fraud Check     │
-                                              │  (fraud_check.py)│ sends callback
-                                              └──────────────────┘ to resume workflow
-```
+![System Architecture](docs/architecture.png)
 
 ## Observability (Powertools)
 
