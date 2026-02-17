@@ -139,3 +139,5 @@ Durable functions **must** be invoked with a qualified ARN (version or alias). T
 - [Lambda Durable Functions Documentation](https://docs.aws.amazon.com/lambda/latest/dg/durable-functions.html)
 - [Durable Execution SDK (Python)](https://github.com/aws/aws-durable-execution-sdk-python)
 - [Best Practices](https://docs.aws.amazon.com/lambda/latest/dg/durable-best-practices.html)
+- [AWS User Group London, Ontario Meeting Deep Dive on Durable Functions](https://www.youtube.com/watch?v=kSQWWYo3KA4&t=1s)
+
