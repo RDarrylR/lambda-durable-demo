@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Lambda Durable Functions - Loan Approval Workflow
+  Lambda Durable Functions - Loan Approval Workflow (Node.js)
   Demonstrates checkpoint/replay, callbacks, retries, parallel execution,
   and the Saga pattern in a realistic loan processing pipeline.
 
 Globals:
   Function:
-    Runtime: python3.13
+    Runtime: nodejs22.x
     Architectures:
       - arm64
     MemorySize: 1024
@@ -46,7 +46,7 @@ Resources:
     Properties:
       FunctionName: LoanWorkflowFunction
       CodeUri: src/
-      Handler: loan_demo.lambda_handler
+      Handler: loan_demo.handler
       Timeout: 300
       AutoPublishAlias: live
       DurableConfig:
@@ -83,7 +83,7 @@ Resources:
     Properties:
       FunctionName: FraudCheckFunction
       CodeUri: src/
-      Handler: fraud_check.lambda_handler
+      Handler: fraud_check.handler
       Timeout: 30
       Environment:
         Variables:
@@ -121,7 +121,7 @@ Resources:
     Properties:
       FunctionName: LoanApiFunction
       CodeUri: src/
-      Handler: api.lambda_handler
+      Handler: api.handler
       Timeout: 30
       Environment:
         Variables:
