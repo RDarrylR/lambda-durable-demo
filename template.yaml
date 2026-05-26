@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Lambda Durable Functions - Loan Approval Workflow
+  Lambda Durable Functions - Loan Approval Workflow (JavaScript/Node.js)
   Demonstrates checkpoint/replay, callbacks, retries, parallel execution,
   and the Saga pattern in a realistic loan processing pipeline.
 
 Globals:
   Function:
-    Runtime: python3.13
+    Runtime: nodejs22.x
     Architectures:
       - arm64
     MemorySize: 1024
@@ -46,11 +46,11 @@ Resources:
     Properties:
       FunctionName: LoanWorkflowFunction
       CodeUri: src/
-      Handler: loan_demo.lambda_handler
+      Handler: loan_demo.handler
       Timeout: 300
       AutoPublishAlias: live
       DurableConfig:
-        ExecutionTimeout: 300           # 5 minutes
+        ExecutionTimeout: 300
         RetentionPeriodInDays: 3
       Environment:
         Variables:
@@ -74,6 +74,18 @@ Resources:
               Action:
                 - lambda:InvokeFunction
               Resource: !GetAtt FraudCheckFunction.Arn
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - loan_demo.mjs
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
   # ──────────────────────────────────────────────────────
   # External Fraud Check (Callback)
@@ -83,7 +95,7 @@ Resources:
     Properties:
       FunctionName: FraudCheckFunction
       CodeUri: src/
-      Handler: fraud_check.lambda_handler
+      Handler: fraud_check.handler
       Timeout: 30
       Environment:
         Variables:
@@ -96,6 +108,18 @@ Resources:
               Action:
                 - lambda:SendDurableExecutionCallbackSuccess
               Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:LoanWorkflowFunction*"
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - fraud_check.mjs
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
   # ──────────────────────────────────────────────────────
   # API Lambda + API Gateway
@@ -121,7 +145,7 @@ Resources:
     Properties:
       FunctionName: LoanApiFunction
       CodeUri: src/
-      Handler: api.lambda_handler
+      Handler: api.handler
       Timeout: 30
       Environment:
         Variables:
@@ -159,6 +183,18 @@ Resources:
             ApiId: !Ref LoanApi
             Path: /approve/{applicationId}
             Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - api.mjs
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
 Outputs:
   LoanApiUrl:

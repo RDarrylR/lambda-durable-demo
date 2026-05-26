@@ -2,9 +2,7 @@ node_modules/
 .aws-sam/
 frontend/dist/
 frontend/node_modules/
-__pycache__/
-*.pyc
-*.egg-info/
+src/node_modules/
 .env
 .env.local
 .DS_Store

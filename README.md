@@ -1,6 +1,6 @@
-# Lambda Durable Functions Demo — Loan Approval Workflow
+# Lambda Durable Functions Demo — Loan Approval Workflow (JavaScript)
 
-A complete, working example of **AWS Lambda Durable Functions** in Python with a **React frontend**, demonstrating checkpoint/replay, parallel execution, human-in-the-loop callbacks (manager approval + external fraud check), and real-time progress tracking through a realistic loan approval pipeline.
+A complete, working example of **AWS Lambda Durable Functions** in JavaScript (Node.js) with a **React frontend**, demonstrating checkpoint/replay, parallel execution, human-in-the-loop callbacks (manager approval + external fraud check), and real-time progress tracking through a realistic loan approval pipeline.
 
 Built for the presentation: **"Lambda Durable Functions vs Step Functions: When Each Wins"**
 
@@ -13,10 +13,10 @@ lambda-durable-demo/
 ├── template.yaml              # SAM template (API GW, Lambdas, DynamoDB)
 ├── samconfig.toml             # SAM deploy configuration
 ├── src/
-│   ├── loan_demo.py           # Durable workflow with DynamoDB progress logging
-│   ├── api.py                 # API Lambda (POST /apply, GET /status, POST /approve)
-│   ├── fraud_check.py         # External fraud check Lambda (callback pattern)
-│   └── requirements.txt       # Python dependencies
+│   ├── loan_demo.mjs         # Durable workflow with DynamoDB progress logging
+│   ├── api.mjs               # API Lambda (POST /apply, GET /status, POST /approve)
+│   ├── fraud_check.mjs       # External fraud check Lambda (callback pattern)
+│   └── package.json          # Node.js dependencies
 └── frontend/
     ├── package.json
     ├── vite.config.js
@@ -32,17 +32,16 @@ lambda-durable-demo/
 
 | Feature | Where | Description |
 |---------|-------|-------------|
-| `@durable_step` | `loan_demo.py` | Checkpointed business logic units |
-| `@durable_execution` | `loan_demo.py` | Durable workflow handler |
-| `context.step()` | `loan_demo.py` | Execute and checkpoint a step |
-| `context.parallel()` | `loan_demo.py` | Concurrent credit bureau checks (3 bureaus) |
-| `context.wait_for_callback()` | `loan_demo.py` | Manager approval + external fraud check |
-| Callback pattern | `fraud_check.py` | External service sends callback to resume workflow |
-| Real-time progress | `api.py` | DynamoDB-backed progress polling from React frontend |
-| Replay detection | `loan_demo.py` | Counter-based `[REPLAY]` tagging on re-executed log entries |
-| Structured logging | All functions | Powertools Logger with JSON output and correlation IDs |
-| X-Ray tracing | `api.py`, `fraud_check.py` | Powertools Tracer with method-level subsegments |
-| CloudWatch metrics | `api.py` | Powertools Metrics (ApplicationsSubmitted, ApprovalsProcessed) |
+| `withDurableExecution` | `loan_demo.mjs` | Durable workflow wrapper |
+| `context.step()` | `loan_demo.mjs` | Execute and checkpoint a step |
+| `context.parallel()` | `loan_demo.mjs` | Concurrent credit bureau checks (3 bureaus) |
+| `context.waitForCallback()` | `loan_demo.mjs` | Manager approval + external fraud check |
+| Callback pattern | `fraud_check.mjs` | External service sends callback to resume workflow |
+| Real-time progress | `api.mjs` | DynamoDB-backed progress polling from React frontend |
+| Replay detection | `loan_demo.mjs` | Counter-based `[REPLAY]` tagging on re-executed log entries |
+| Structured logging | All functions | Powertools Logger with JSON output |
+| X-Ray tracing | `api.mjs`, `fraud_check.mjs` | Powertools Tracer with subsegments |
+| CloudWatch metrics | `api.mjs` | Powertools Metrics (ApplicationsSubmitted, ApprovalsProcessed) |
 
 ## Workflow
 
@@ -60,8 +59,7 @@ Three hardcoded profiles produce predictable outcomes:
 
 ## Prerequisites
 
-- Python 3.13+
-- Node.js 18+
+- Node.js 22+
 - [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/) v1.150.1+
 - AWS account with Lambda access
 
@@ -103,13 +101,25 @@ The frontend runs at `http://localhost:5173`.
 
 ![System Architecture](docs/architecture.png)
 
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js 22.x (ES Modules) |
+| Durable SDK | `@aws/durable-execution-sdk-js` |
+| Observability | AWS Lambda Powertools for TypeScript (Logger, Tracer, Metrics) |
+| AWS SDK | AWS SDK v3 (`@aws-sdk/client-lambda`, `@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`) |
+| Build | SAM with esbuild (ESM format) |
+| Frontend | React 19 + Vite 6 |
+| Infrastructure | AWS SAM (API Gateway HttpApi, Lambda, DynamoDB) |
+
 ## Observability (Powertools)
 
-All functions use [AWS Lambda Powertools for Python](https://docs.powertools.aws.dev/lambda/python/latest/) for structured observability:
+All functions use [AWS Lambda Powertools for TypeScript](https://docs.powertools.aws.dev/lambda/typescript/latest/) for structured observability:
 
-- **Logger**: JSON-structured logs with correlation IDs and `application_id` context
-- **Tracer**: X-Ray tracing with method-level subsegments (on `api.py` and `fraud_check.py` — not on `loan_demo.py` because `@durable_execution` replay would create misleading traces)
-- **Metrics**: CloudWatch EMF metrics for `ApplicationsSubmitted`, `ApprovalsProcessed`, and `ColdStart` (on `api.py` only)
+- **Logger**: JSON-structured logs with context injection
+- **Tracer**: X-Ray tracing with method-level subsegments (on `api.mjs` and `fraud_check.mjs` — not on `loan_demo.mjs` because durable execution replay would create misleading traces)
+- **Metrics**: CloudWatch EMF metrics for `ApplicationsSubmitted`, `ApprovalsProcessed`, and `ColdStart` (on `api.mjs` only)
 
 ## Key Concepts
 
@@ -123,10 +133,10 @@ When a durable function resumes after a callback or failure, the handler **re-ex
 
 ### Callback Pattern
 
-The workflow uses `context.wait_for_callback()` in two places:
+The workflow uses `context.waitForCallback()` in two places:
 
 1. **Manager approval** — the workflow suspends and stores a `callback_id` in DynamoDB. The frontend reads it and sends the approval via the API.
-2. **Fraud check** — the workflow invokes an external Lambda (`fraud_check.py`) which processes the request and calls `send_durable_execution_callback_success` to resume the workflow.
+2. **Fraud check** — the workflow invokes an external Lambda (`fraud_check.mjs`) which processes the request and calls `SendDurableExecutionCallbackSuccess` to resume the workflow.
 
 In both cases, the Lambda uses **zero compute** while waiting.
 
@@ -134,10 +144,18 @@ In both cases, the Lambda uses **zero compute** while waiting.
 
 Durable functions **must** be invoked with a qualified ARN (version or alias). This ensures replay uses the same code version that started the execution. The template uses `AutoPublishAlias: live` to handle this automatically.
 
+### ESM & esbuild
+
+The backend uses ES Modules (`.mjs` files) bundled with esbuild via SAM's `BuildMethod: esbuild` metadata. This provides:
+
+- Tree-shaking for smaller deployment packages
+- Fast build times
+- Native ES module support in Node.js 22
+
 ## Resources
 
 - [Lambda Durable Functions Documentation](https://docs.aws.amazon.com/lambda/latest/dg/durable-functions.html)
-- [Durable Execution SDK (Python)](https://github.com/aws/aws-durable-execution-sdk-python)
+- [Durable Execution SDK (JavaScript)](https://github.com/aws/aws-durable-execution-sdk-js)
+- [AWS Lambda Powertools for TypeScript](https://docs.powertools.aws.dev/lambda/typescript/latest/)
 - [Best Practices](https://docs.aws.amazon.com/lambda/latest/dg/durable-best-practices.html)
-- [AWS User Group London, Ontario Meeting Deep Dive on Durable Functions](https://www.youtube.com/watch?v=kSQWWYo3KA4&t=1s)
-
+- [AWS User Group London, Ontario Meeting Deep Dive on Durable Functions](https://www.youtube.com/watch?v=kSQWYo3KA4&t=1s)
